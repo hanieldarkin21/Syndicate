@@ -1,0 +1,61 @@
+"""
+Bollinger Bands - O(1) incremental using Welford's algorithm
+Volatility bands around moving average
+"""
+
+from numba import njit
+import numpy as np
+
+
+@njit
+def calculate_bollinger(window, idx, count, sum_val, sum_sq, new_price, period, num_std):
+    """
+    O(1) Bollinger Bands update using Welford's online algorithm
+
+    Middle Band = SMA
+    Upper Band = SMA + (num_std × standard deviation)
+    Lower Band = SMA - (num_std × standard deviation)
+
+    Args:
+        window: circular buffer
+        idx: current index
+        count: values in buffer
+        sum_val: running sum
+        sum_sq: running sum of squares
+        new_price: new price
+        period: period (typically 20)
+        num_std: number of standard deviations (typically 2)
+
+    Returns: (middle, upper, lower, new_idx, new_count, new_sum, new_sum_sq)
+    """
+    # Remove oldest if buffer full
+    if count == period:
+        old_price = window[idx]
+        sum_val = sum_val - old_price + new_price
+        sum_sq = sum_sq - (old_price * old_price) + (new_price * new_price)
+    else:
+        sum_val += new_price
+        sum_sq += new_price * new_price
+        count += 1
+
+    # Add new price
+    window[idx] = new_price
+    idx = (idx + 1) % period
+
+    # Calculate middle band (SMA)
+    if count == period:
+        middle = sum_val / period
+
+        # Calculate standard deviation
+        variance = (sum_sq / period) - (middle * middle)
+        std_dev = np.sqrt(max(variance, 0.0))  # Avoid negative variance from floating point errors
+
+        # Calculate bands
+        upper = middle + (num_std * std_dev)
+        lower = middle - (num_std * std_dev)
+    else:
+        middle = 0.0
+        upper = 0.0
+        lower = 0.0
+
+    return middle, upper, lower, idx, count, sum_val, sum_sq
